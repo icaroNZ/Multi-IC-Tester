@@ -80,7 +80,19 @@ void SRAMStrategy::setAddress(uint16_t addr) {
     PORTA = (uint8_t)(addr & 0xFF);
 
     // High byte (A8-A15) on PORTC
-    PORTC = (uint8_t)((addr >> 8) & 0xFF);
+    uint8_t highByte = (uint8_t)((addr >> 8) & 0xFF);
+
+    // CRITICAL: Pin 26 differences between chips
+    // - HM62256 (32KB): Pin 26 = A13 (address line, use normally)
+    // - HM6265 (8KB):  Pin 26 = CS2 (must be HIGH to enable chip)
+    // - D4168 (8KB):   Pin 26 = CS (must be HIGH to enable chip)
+    //
+    // For 8KB chips, force A13 (PORTC bit 5) HIGH to enable CS/CS2
+    if (sramSize <= 8192) {
+        highByte |= (1 << 5);  // Set A13 HIGH (PORTC bit 5 = pin 26)
+    }
+
+    PORTC = highByte;
 }
 
 void SRAMStrategy::writeByte(uint16_t addr, uint8_t data) {

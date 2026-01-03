@@ -39,32 +39,48 @@ Phase 3 implements comprehensive SRAM testing with support for multiple chip siz
 
 **D4168 (8KB):**
 - Address Range: 0x0000 - 0x1FFF (13 address lines)
-- Pin 1: NC (No Connect)
+- Pin 1: /RFFSH (refresh - treat as NC for SRAM)
 - Pin 20: /CS (active low chip select)
-- Pin 26: CS (active high chip select - opposite of pin 20)
-- Compatible with HM6265 (can use /CS on pin 20, ignore CS on pin 26)
+- Pin 26: **CS (active HIGH chip select)** - must be HIGH with /CS LOW to enable chip
+- **CRITICAL**: Pin 26 must be driven HIGH (not used as address line)
 
 ## 3. Pin Configuration
 
-### 28-Pin DIP Pinout (Generic):
+### Critical Pin Differences:
+
+**Pin 1 (varies by chip):**
+- HM62256 (32KB): **A14** (address line)
+- HM6265 (8KB): NC (not connected)
+- D4168 (8KB): /RFFSH (not used for SRAM)
+
+**Pin 26 (CRITICAL - varies by chip):**
+- HM62256 (32KB): **A13** (address line)
+- HM6265 (8KB): **CS2** (second chip select, active HIGH)
+- D4168 (8KB): **CS** (chip select, active HIGH)
+
+**Implementation Note:**
+For 8KB chips (HM6265/D4168), pin 26 must be driven **HIGH** to enable the chip (via CS/CS2). We achieve this by forcing A13=1 when setting addresses for 8KB chips.
+
+### 28-Pin DIP Pinout:
 
 ```
-         ┌──────┐
-    A14 │1   28│ VCC
-    A12 │2   27│ /WE
-    A7  │3   26│ CS  (D4168 only, NC for HM62256/HM6265)
-    A6  │4   25│ A8
-    A5  │5   24│ A9
-    A4  │6   23│ A11
-    A3  │7   22│ /OE
-    A2  │8   21│ A10
-    A1  │9   20│ /CS
-    A0  │10  19│ D7
-    D0  │11  18│ D6
-    D1  │12  17│ D5
-    D2  │13  16│ D4
-    GND │14  15│ D3
-         └──────┘
+              HM62256    HM6265     D4168
+         ┌──────────────────────────────┐
+    Pin1 │  A14        NC         /RFFSH │ 1   28│ VCC
+         │  A12        A12        A12    │ 2   27│ /WE
+         │  A7         A7         A7     │ 3   26│ A13/CS2/CS (SEE ABOVE!)
+         │  A6         A6         A6     │ 4   25│ A8
+         │  A5         A5         A5     │ 5   24│ A9
+         │  A4         A4         A4     │ 6   23│ A11
+         │  A3         A3         A3     │ 7   22│ /OE
+         │  A2         A2         A2     │ 8   21│ A10
+         │  A1         A1         A1     │ 9   20│ /CS
+         │  A0         A0         A0     │10  19│ D7
+         │  D0         D0         D0     │11  18│ D6
+         │  D1         D1         D1     │12  17│ D5
+         │  D2         D2         D2     │13  16│ D4
+         │  GND        GND        GND    │14  15│ D3
+         └──────────────────────────────┘
 ```
 
 ### Arduino Mega 2560 Pin Mapping (from PinConfig.h):
