@@ -4,7 +4,7 @@
  * Implementation of Mode Manager
  */
 
-#include "ModeManager.h"
+#include "utils/ModeManager.h"
 
 ModeManager::ModeManager()
     : currentStrategy(nullptr), currentMode(NONE) {

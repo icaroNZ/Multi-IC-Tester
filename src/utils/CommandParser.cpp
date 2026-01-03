@@ -4,7 +4,7 @@
  * Implementation of command parsing logic
  */
 
-#include "CommandParser.h"
+#include "utils/CommandParser.h"
 
 ParsedCommand CommandParser::parse(const String& line) {
     ParsedCommand result;

@@ -4,7 +4,7 @@
  * Implementation of UART communication wrapper
  */
 
-#include "UARTHandler.h"
+#include "utils/UARTHandler.h"
 
 void UARTHandler::begin(uint32_t baud) {
     Serial.begin(baud);
