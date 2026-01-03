@@ -21,16 +21,18 @@
 #include "utils/CommandParser.h"
 #include "utils/ModeManager.h"
 #include "hardware/Timer3.h"
+#include "strategies/SRAMStrategy.h"
 
 // Global instances
 UARTHandler uart;
 CommandParser parser;
 ModeManager modeManager;
 Timer3Clock timer3;  // Phase 2: Clock generator for testing
+SRAMStrategy sramStrategy;  // Phase 3: SRAM testing strategy
 
 // Function declarations
 void handleModeCommand(const String& parameter);
-void handleTestCommand();
+void handleTestCommand(const String& parameter);
 void handleStatusCommand();
 void handleResetCommand();
 void handleHelpCommand();
@@ -76,7 +78,7 @@ void loop() {
                 break;
 
             case TEST:
-                handleTestCommand();
+                handleTestCommand(cmd.parameter);
                 break;
 
             case STATUS:
@@ -108,17 +110,57 @@ void loop() {
 
 /**
  * Handle MODE command
- * Validates IC type parameter but doesn't switch mode (strategies not implemented yet)
+ * Supports: MODE Z80, MODE 6502, MODE SRAM <size>
  */
 void handleModeCommand(const String& parameter) {
     // Check if parameter provided
     if (parameter.length() == 0) {
         uart.sendError("Missing IC type. Usage: MODE <IC>");
-        uart.sendInfo("Valid IC types: Z80, 6502, 62256");
+        uart.sendInfo("IC types: Z80, 6502, SRAM <size>");
+        uart.sendInfo("Example: MODE SRAM 32768");
         return;
     }
 
-    // Validate IC type
+    // Check for SRAM mode
+    if (parameter.startsWith("SRAM ")) {
+        // Extract size parameter
+        String sizeStr = parameter.substring(5);
+        sizeStr.trim();
+
+        if (sizeStr.length() == 0) {
+            uart.sendError("Missing SRAM size. Usage: MODE SRAM <size>");
+            uart.sendInfo("Valid sizes: 8192 (8KB), 32768 (32KB)");
+            return;
+        }
+
+        uint32_t size = sizeStr.toInt();
+
+        // Validate size (must be power of 2 and <= 64KB)
+        if (size == 0 || size > 65536) {
+            uart.sendError("Invalid SRAM size");
+            uart.sendInfo("Valid sizes: 8192 (8KB), 32768 (32KB)");
+            return;
+        }
+
+        // Configure SRAM strategy
+        sramStrategy.setSize((uint16_t)size);
+        sramStrategy.setUARTHandler(&uart);
+        sramStrategy.configurePins();
+        modeManager.setStrategy(&sramStrategy, ModeManager::SRAM62256);
+
+        String msg = "SRAM mode set: " + String((uint16_t)size) + " bytes";
+        uart.sendOK(msg.c_str());
+
+        if (size == 32768) {
+            uart.sendInfo("Configured for HM62256 (32KB)");
+        } else if (size == 8192) {
+            uart.sendInfo("Configured for HM6265/D4168 (8KB)");
+        }
+
+        return;
+    }
+
+    // Check other IC types
     if (parameter == "Z80") {
         uart.sendError("Z80 strategy not implemented yet");
         uart.sendInfo("Will be available in Phase 4");
@@ -127,25 +169,22 @@ void handleModeCommand(const String& parameter) {
         uart.sendError("6502 strategy not implemented yet");
         uart.sendInfo("Will be available in Phase 5");
     }
-    else if (parameter == "62256") {
-        uart.sendError("HM62256 strategy not implemented yet");
-        uart.sendInfo("Will be available in Phase 3");
-    }
     else {
         uart.sendError("Invalid IC type");
-        uart.sendInfo("Valid IC types: Z80, 6502, 62256");
+        uart.sendInfo("IC types: Z80, 6502, SRAM <size>");
+        uart.sendInfo("Example: MODE SRAM 32768");
     }
 }
 
 /**
  * Handle TEST command
- * Checks if mode is set and runs tests (not implemented yet)
+ * Supports: TEST, TEST FULL, TEST RANDOM, TEST RANDOM FULL, TEST <N>, TEST <N> FULL
  */
-void handleTestCommand() {
+void handleTestCommand(const String& parameter) {
     // Check if mode is set
     if (modeManager.getCurrentMode() == ModeManager::NONE) {
         uart.sendError("No IC mode selected");
-        uart.sendInfo("Use MODE command first: MODE <Z80|6502|62256>");
+        uart.sendInfo("Use MODE command first: MODE SRAM <size>");
         return;
     }
 
@@ -157,12 +196,50 @@ void handleTestCommand() {
         return;
     }
 
-    // Run tests (strategy implementation coming in Phase 3+)
+    // For SRAM, parse test options
+    if (modeManager.getCurrentMode() == ModeManager::SRAM62256) {
+        SRAMStrategy* sram = static_cast<SRAMStrategy*>(strategy);
+
+        String param = parameter;
+        param.trim();
+
+        // Check for FULL mode flag
+        bool fullTest = param.endsWith("FULL");
+        if (fullTest) {
+            param = param.substring(0, param.length() - 4);
+            param.trim();
+        }
+
+        if (param.length() == 0) {
+            // No parameter: Default (tests 1-6, QUICK or FULL)
+            uart.sendInfo(fullTest ? "Running tests 1-6 (FULL mode)..." : "Running tests 1-6 (QUICK mode)...");
+            sram->runAllTests(false, fullTest);
+            return;
+        }
+
+        if (param == "RANDOM") {
+            // Run all tests including random
+            uart.sendInfo(fullTest ? "Running tests 1-7 (FULL mode)..." : "Running tests 1-7 (QUICK mode)...");
+            sram->runAllTests(true, fullTest);
+            return;
+        }
+
+        // Check if it's a test number
+        uint8_t testNum = param.toInt();
+        if (testNum >= 1 && testNum <= 7) {
+            uart.sendInfo(fullTest ? "Running single test (FULL mode)..." : "Running single test (QUICK mode)...");
+            sram->runTest(testNum, fullTest);
+            return;
+        }
+
+        uart.sendError("Invalid TEST parameter");
+        uart.sendInfo("Usage: TEST [FULL|RANDOM|RANDOM FULL|<1-7>|<1-7> FULL]");
+        return;
+    }
+
+    // For other ICs, use default runTests()
     uart.sendInfo("Starting tests...");
     strategy->runTests();
-
-    // Result already sent by strategy->runTests()
-    // No additional output needed here
 }
 
 /**
@@ -239,12 +316,17 @@ void handleHelpCommand() {
     uart.sendInfo("");
     uart.sendInfo("  MODE <IC>");
     uart.sendInfo("    Select IC type for testing");
-    uart.sendInfo("    IC types: Z80, 6502, 62256");
-    uart.sendInfo("    Example: MODE Z80");
+    uart.sendInfo("    IC types: Z80, 6502, SRAM <size>");
+    uart.sendInfo("    Example: MODE SRAM 32768 (HM62256)");
     uart.sendInfo("");
-    uart.sendInfo("  TEST");
+    uart.sendInfo("  TEST [options]");
     uart.sendInfo("    Run tests for selected IC");
     uart.sendInfo("    Must select MODE first");
+    uart.sendInfo("    For SRAM:");
+    uart.sendInfo("      TEST          - Tests 1-6, QUICK");
+    uart.sendInfo("      TEST FULL     - Tests 1-6, FULL");
+    uart.sendInfo("      TEST RANDOM   - Tests 1-7, QUICK");
+    uart.sendInfo("      TEST <1-7>    - Run single test");
     uart.sendInfo("");
     uart.sendInfo("  STATUS");
     uart.sendInfo("    Show current configuration");
