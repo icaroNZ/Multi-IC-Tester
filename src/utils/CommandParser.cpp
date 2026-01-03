@@ -53,6 +53,12 @@ CommandType CommandParser::parseCommandType(const String& cmd) {
     else if (cmd == "HELP") {
         return HELP;
     }
+    else if (cmd == "CLOCK") {
+        return CLOCK;
+    }
+    else if (cmd == "CLOCKSTOP") {
+        return CLOCKSTOP;
+    }
     else {
         return INVALID;
     }

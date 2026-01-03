@@ -20,11 +20,13 @@
 #include "utils/UARTHandler.h"
 #include "utils/CommandParser.h"
 #include "utils/ModeManager.h"
+#include "hardware/Timer3.h"
 
 // Global instances
 UARTHandler uart;
 CommandParser parser;
 ModeManager modeManager;
+Timer3Clock timer3;  // Phase 2: Clock generator for testing
 
 // Function declarations
 void handleModeCommand(const String& parameter);
@@ -32,6 +34,8 @@ void handleTestCommand();
 void handleStatusCommand();
 void handleResetCommand();
 void handleHelpCommand();
+void handleClockCommand(const String& parameter);
+void handleClockStopCommand();
 
 void setup() {
     // Initialize UART communication
@@ -85,6 +89,14 @@ void loop() {
 
             case HELP:
                 handleHelpCommand();
+                break;
+
+            case CLOCK:
+                handleClockCommand(cmd.parameter);
+                break;
+
+            case CLOCKSTOP:
+                handleClockStopCommand();
                 break;
 
             case INVALID:
@@ -245,10 +257,62 @@ void handleHelpCommand() {
     uart.sendInfo("  HELP");
     uart.sendInfo("    Show this help message");
     uart.sendInfo("");
+    uart.sendInfo("  CLOCK <frequency>");
+    uart.sendInfo("    Start Timer3 clock at frequency (Hz)");
+    uart.sendInfo("    Output on PE3 (pin 5)");
+    uart.sendInfo("    Example: CLOCK 1000000");
+    uart.sendInfo("");
+    uart.sendInfo("  CLOCKSTOP");
+    uart.sendInfo("    Stop Timer3 clock output");
+    uart.sendInfo("");
     uart.sendInfo("========================================");
     uart.sendInfo("Notes:");
     uart.sendInfo("  - Commands are case-sensitive");
     uart.sendInfo("  - Only one IC tested at a time");
     uart.sendInfo("  - Strategies implemented in Phase 3+");
+    uart.sendInfo("  - CLOCK commands for Phase 2 testing");
     uart.sendInfo("========================================");
+}
+
+/**
+ * Handle CLOCK command (Phase 2 testing)
+ * Configure and start Timer3 clock at specified frequency
+ */
+void handleClockCommand(const String& parameter) {
+    // Check if parameter provided
+    if (parameter.length() == 0) {
+        uart.sendError("Missing frequency. Usage: CLOCK <frequency>");
+        uart.sendInfo("Example: CLOCK 1000000 (for 1 MHz)");
+        return;
+    }
+
+    // Parse frequency
+    uint32_t frequency = parameter.toInt();
+
+    // Validate frequency (1 Hz to 8 MHz)
+    if (frequency < 1 || frequency > 8000000) {
+        uart.sendError("Frequency out of range (1 Hz to 8 MHz)");
+        return;
+    }
+
+    // Configure and start clock
+    timer3.configure(frequency);
+    timer3.start();
+
+    // Send confirmation
+    String msg = "Clock started at " + String(frequency) + " Hz";
+    uart.sendOK(msg.c_str());
+    uart.sendInfo("Output on PE3 (pin 5)");
+}
+
+/**
+ * Handle CLOCKSTOP command (Phase 2 testing)
+ * Stop Timer3 clock output
+ */
+void handleClockStopCommand() {
+    // Stop clock
+    timer3.stop();
+
+    // Send confirmation
+    uart.sendOK("Clock stopped");
 }

@@ -32,6 +32,8 @@ enum CommandType {
     STATUS,     // Show status
     RESET,      // Reset IC
     HELP,       // Show help
+    CLOCK,      // Configure and start clock (Phase 2 test)
+    CLOCKSTOP,  // Stop clock (Phase 2 test)
     INVALID     // Unknown command
 };
 
